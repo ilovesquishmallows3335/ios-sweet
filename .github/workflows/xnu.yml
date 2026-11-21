@@ -22,7 +22,7 @@ on:
       - ".github/workflows/xnu.yml"
 
 concurrency:
-  group: xnu-${{ github.ref }}-${{ github.event_name }}-${{ github.run_id }}
+  group: xnu-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 env:
