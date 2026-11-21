@@ -1,0 +1,43 @@
+# Cirrus CI config for XNU kernel builds (free macOS for public repos)
+# Connect at https://cirrus-ci.com/github/ilovesquishmallows3335/ios-sweet
+
+task:
+  name: xnu-kernel
+  macos_instance:
+    image: macos-ventura-xcode-15  # Xcode 15 for xnu-8796 compatibility
+  timeout_in: 120m
+  env:
+    MACHINE_CONFIG: "KIEV"
+    KERNEL_CONFIG: "DEVELOPMENT"
+    DXB_REPO: "https://github.com/blacktop/darwin-xnu-build"
+    DXB_SHA: "663906528d1cd5ea8fde7de6f16de73db9511549"
+  install_script:
+    - brew install jq bash cmake ninja
+    - printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
+    - sudo chmod +x /usr/local/bin/xcodes
+    - XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+    - echo "DEVELOPER_DIR=$XC/Contents/Developer" >> $HOME/.cirrus.env
+    - sudo xcode-select -s "$XC"
+    - xcodebuild -version
+    - xcrun --find iig
+  build_script:
+    - git init -q dxb
+    - git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
+    - git -C dxb checkout -q FETCH_HEAD
+    - cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/ 2>/dev/null || true
+    - sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
+    - grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+    - ls dxb/patches
+    - cd dxb && MAKEFLAGS="-k" MACHINE_CONFIG=$MACHINE_CONFIG KERNEL_CONFIG=$KERNEL_CONFIG bash build.sh
+  artifacts:
+    - path: dxb/fakeroot/System/Library/Kernels/kernel.development.KIEV
+      name: kernel
+    - path: dxb/build/xnu.obj
+      name: build-obj
+    - path: dxb/fakeroot/usr/local/include
+      name: headers
+  on_failure:
+    - echo "Build failed, check logs above"
+
+# Trigger manually or on push to main (patch changes)
+# For manual runs, set MACHINE_CONFIG/KERNEL_CONFIG via Cirrus UI
